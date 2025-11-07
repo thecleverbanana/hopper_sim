@@ -1,0 +1,8 @@
+body_mass: 1
+leg_mass: 0.2
+spring_length: 0.3
+spring_constant: 800
+gravity: 9.81
+x0: [0.25, 0.0, 0.0, 0.0] # yb, yb_dot, yl, yl_dot
+
+  

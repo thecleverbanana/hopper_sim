@@ -1,0 +1,25 @@
+<mujoco model="simple_pendulum">
+    <compiler angle="degree" coordinate="local"/>
+    <option timestep="0.002" gravity="0 0 -9.81"/>
+
+    <default>
+        <joint armature="0.01" damping="1"/>
+        <geom friction="0.8 0.1 0.1" rgba="0.8 0.3 0.3 1"/>
+    </default>
+
+    <worldbody>
+        <!-- Ground -->
+        <geom name="floor" type="plane" pos="0 0 0" size="5 5 0.1" rgba="0.2 0.3 0.4 1"/>
+
+        <!-- Pendulum body -->
+        <body name="pendulum" pos="0 0 1">
+            <joint name="hinge" type="hinge" axis="0 1 0" limited="false" damping="0.05"/>
+            <geom name="rod" type="capsule" fromto="0 0 0 0 0 -1" size="0.05"/>
+            <site name="tip" pos="0 0 -1"/>
+        </body>
+    </worldbody>
+
+    <actuator>
+        <motor joint="hinge" ctrlrange="-1 1" gear="1"/>
+    </actuator>
+</mujoco>
