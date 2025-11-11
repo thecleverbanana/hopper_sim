@@ -1,5 +1,5 @@
 body_mass: 1
-leg_mass: 0.2
+leg_mass: 0.3
 spring_length: 0.3
 spring_constant: 100
 gravity: 9.81

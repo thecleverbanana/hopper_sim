@@ -1,5 +1,6 @@
 # https://ieeexplore.ieee.org/document/7989248
 import numpy as np
+from scipy.optimize import minimize
 
 class simplified_GRP_hopper:
     def __init__(self, mb, mf, k, c, l0, g=9.81):
@@ -66,6 +67,7 @@ class simplified_GRP_hopper:
         return np.array([x_b_dot, x_b_ddot, x_f_dot, x_f_ddot]), F_sub
 
     class PDController:
+        # Classic PD Controller for Testing Only
         def __init__(self, kp, kd):
             self.kp = kp
             self.kd = kd
@@ -84,3 +86,53 @@ class simplified_GRP_hopper:
             # Control input (actuator force)
             u = self.kp * error + self.kd * derror
             return u
+        
+    class NLPController:
+        def __init__(self, hopper, state='stance', horizon=5, dt=0.01):
+            self.hopper = hopper
+            self.state = state
+            self.horizon = horizon
+            self.dt = dt
+
+        def simulate_dynamics(self, X, u):
+            """One-step forward simulation based on current phase."""
+            if self.state == 'flight':
+                dX, _ = self.hopper.flight_state(X, u)
+            else:
+                dX, _ = self.hopper.stance_state(X, u)
+            return X + dX * self.dt
+
+        def cost_function(self, u_seq, X0, l_ref):
+            """
+            Cost over the prediction horizon:
+            penalize deviation of leg length from reference and control effort.
+            """
+            X = np.copy(X0)
+            cost = 0.0
+            for u in u_seq:
+                # propagate dynamics
+                X = self.simulate_dynamics(X, u)
+                x_b, x_f = X[0], X[2]
+                l = x_b - x_f  # leg length
+
+                # cost: leg length tracking + control effort regularization
+                cost += (l - l_ref)**2 + 0.01 * (u**2)
+            return cost
+
+        def compute(self, X0, l_ref):
+            """Compute optimal control input to minimize tracking error."""
+            u_init = np.zeros(self.horizon)
+            bounds = [(-200, 200)] * self.horizon  # actuator force limits
+
+            res = minimize(
+                self.cost_function,
+                u_init,
+                args=(X0, l_ref),
+                bounds=bounds,
+                method='SLSQP',
+                options={'maxiter': 150, 'ftol': 1e-5, 'disp': False}
+            )
+
+            # return first control input if optimization succeeded
+            return res.x[0] if res.success else 0.0
+

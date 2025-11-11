@@ -12,7 +12,7 @@ simplified_GRP_hopper:
   # --- Control settings ---
   controller:
     type: "PD"
-    kp: 200.0           # proportional gain
+    kp: 5000.0           # proportional gain
     kd: 12.0            # derivative gain
 
   # --- Simulation defaults (optional placeholders) ---
