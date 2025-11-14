@@ -152,13 +152,13 @@ class simplified_GRP_hopper:
             mode_seq,
             u_min, u_max,
             l_ref,
-            Q_l=1.0,
-            R_u=1e-3,
-            Q_bh=0.0,
-            Q_fh=0.0,
-            Q_bd=0.0,
-            body_ref=0.3,
-            foot_ref=0.0,
+            Q_l,
+            R_u,
+            Q_bh,
+            Q_fh,
+            Q_bd,
+            body_ref,
+            foot_ref,
         ):
 
             # -----------------------------
@@ -384,6 +384,90 @@ class simplified_GRP_hopper:
 
             return J.ravel()
 
+
+        # -----------------------------------------------------
+        # Predict future mode sequence (static method)
+        # -----------------------------------------------------
+        @staticmethod
+        def predict_mode_sequence(x_current, state_current, H, dt_control, g=9.81):
+            """
+            Predict the mode sequence (flight/stance) over the MPC horizon.
+            
+            Args:
+                x_current: current state [x_b, x_b_dot, x_f, x_f_dot]
+                state_current: current mode string ("flight" or "stance")
+                H: horizon length
+                dt_control: MPC timestep
+                g: gravity acceleration (default 9.81 m/s²)
+                
+            Returns:
+                mode_seq: list of "flight" or "stance" for each horizon step
+            """
+            mode_seq = []
+            x_b, x_b_dot, x_f, x_f_dot = x_current
+            current_mode = state_current
+            t_elapsed = 0.0
+            
+            for k in range(H):
+                if current_mode == "flight":
+                    # Simple ballistic prediction: when will foot hit ground?
+                    # x_f(t) = x_f + x_f_dot*t - 0.5*g*t^2
+                    # Touchdown when x_f(t) = 0
+                    if x_f > 0 and x_f_dot < 0:
+                        # Predict touchdown time
+                        discriminant = x_f_dot**2 + 2*g*x_f
+                        if discriminant > 0:
+                            t_touchdown = (-x_f_dot - np.sqrt(discriminant)) / g
+                        else:
+                            t_touchdown = 1e6  # Never lands
+                        
+                        if t_elapsed < t_touchdown:
+                            mode_seq.append("flight")
+                        else:
+                            # After touchdown, switch to stance
+                            current_mode = "stance"
+                            mode_seq.append("stance")
+                    else:
+                        # Either on ground or moving up → will be in flight for a while
+                        mode_seq.append("flight")
+                
+                else:  # stance
+                    # In stance, predict liftoff based on typical hop duration
+                    # For now, use a simple heuristic: stance typically lasts 0.1-0.2s
+                    # After that, switch to flight
+                    if t_elapsed > 0.05:  # ~50ms stance duration estimate
+                        current_mode = "flight"
+                        mode_seq.append("flight")
+                    else:
+                        mode_seq.append("stance")
+                
+                t_elapsed += dt_control
+            
+            return mode_seq
+
+        # -----------------------------------------------------
+        # Update mode sequence for horizon
+        # -----------------------------------------------------
+        def update_mode_sequence(self, mode_seq):
+            """
+            Update the mode sequence for the MPC horizon.
+            
+            Args:
+                mode_seq: list of "flight" or "stance" for each horizon step (length H)
+            
+            Raises:
+                AssertionError: if mode_seq length doesn't match horizon H
+                ValueError: if mode_seq contains invalid mode strings
+            """
+            if len(mode_seq) != self.H:
+                raise ValueError(f"Mode sequence length {len(mode_seq)} doesn't match horizon {self.H}")
+            
+            # Validate mode strings
+            for mode in mode_seq:
+                if mode not in ["flight", "stance"]:
+                    raise ValueError(f"Invalid mode '{mode}'. Must be 'flight' or 'stance'")
+            
+            self.mode_seq = list(mode_seq)
 
         # -----------------------------------------------------
         # Solve MPC and return u0

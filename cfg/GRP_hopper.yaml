@@ -2,7 +2,7 @@ simplified_GRP_hopper:
   # --- Physical parameters ---
   mb: 2.0            # [kg] body mass
   mf: 0.2            # [kg] foot/leg mass
-  k: 1200.0           # [N/m] spring stiffness
+  k: 100.0           # [N/m] spring stiffness
   c: 1.5             # [N·s/m] damping coefficient
   l0: 0.3            # [m] rest leg length
   g: 9.81            # [m/s²] gravity
@@ -24,20 +24,20 @@ simplified_GRP_hopper:
       dt_control: 0.005  # [s] timestep for MPC planning (can be coarser than simulation)
       
       # Control Input Constraints
-      u_min: -50.0      # [N] minimum control force
-      u_max: 50.0       # [N] maximum control force
+      u_min: -500.0      # [N] minimum control force
+      u_max: 500.0       # [N] maximum control force
 
       # Cost Function Weights
-      Q_l: 1           # leg length tracking weight (0 = disabled)
-      Q_bh: 10.0       # body height tracking weight
-      Q_fh: 0.0          # foot height tracking weight (0 = disabled)
-      Q_bd: 0.0          # body velocity damping weight
-      R_u: 1.0        # control effort penalty
+      Q_l: 0.0          # leg length tracking weight (ENABLED for flight phase control)
+      Q_bh: 10.0          # body height tracking weight
+      Q_fh: 0.0           # foot height tracking weight (0 = disabled)
+      Q_bd: 0.0           # body velocity damping weight
+      R_u: 0.01          # control effort penalty
       
       # Reference Targets
-      l_ref: 0.3         # [m] reference leg length
-      body_ref: 0.2      # [m] reference body height
-      foot_ref: 0.0      # [m] reference foot height
+      l_ref: 0.45         # [m] reference leg length (achievable with k=1000)
+      body_ref: 0.5       # [m] reference body height
+      foot_ref: 0.0       # [m] reference foot height
 
   # --- Simulation settings ---
   simulation:
@@ -46,4 +46,4 @@ simplified_GRP_hopper:
     control_update_freq: 50     # update MPC every N simulation steps (every dt*N seconds = 0.05s = 20Hz)
 
   # --- Initial conditions ---
-  x0: [[0.5, -0.1, 0.4, 0.0]]  # initial state [x_b, x_b_dot, x_f, x_f_dot]
+  x0: [[0.6, 0.0, 0.0, 0.0]]  # initial state [x_b, x_b_dot, x_f, x_f_dot]
