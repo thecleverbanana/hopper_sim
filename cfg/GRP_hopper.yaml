@@ -28,7 +28,7 @@ simplified_GRP_hopper:
       u_max: 200.0       # [N] maximum control force
 
       # Cost Function Weights
-      Q_l: 0.0           # leg length tracking weight (0 = disabled)
+      Q_l: 0.1           # leg length tracking weight (0 = disabled)
       Q_bh: 10.0       # body height tracking weight
       Q_fh: 0.0          # foot height tracking weight (0 = disabled)
       Q_bd: 0.0          # body velocity damping weight
@@ -36,14 +36,14 @@ simplified_GRP_hopper:
       
       # Reference Targets
       l_ref: 0.3         # [m] reference leg length
-      body_ref: 0.5      # [m] reference body height
+      body_ref: 0.2      # [m] reference body height
       foot_ref: 0.0      # [m] reference foot height
 
   # --- Simulation settings ---
   simulation:
     dt: 0.001                   # [s] simulation timestep
     t_max: 2.0                  # [s] total simulation time
-    control_update_freq: 10     # update MPC every N simulation steps (every dt*N seconds)
+    control_update_freq: 50     # update MPC every N simulation steps (every dt*N seconds = 0.05s = 20Hz)
 
   # --- Initial conditions ---
   x0: [[0.5, -0.1, 0.4, 0.0]]  # initial state [x_b, x_b_dot, x_f, x_f_dot]
