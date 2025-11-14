@@ -86,77 +86,77 @@ class simplified_GRP_hopper:
             # Control input (actuator force)
             u = self.kp * error + self.kd * derror
             return u
-        
 
-    # ---------- NEW: NLP controller with multiple shooting ----------
     class NLPController(cyipopt.Problem):
-        """
-        Multiple-shooting NLP for one horizon, using trapezoidal integration.
-
-        State at node k:
-            x_k = [x_b, x_b_dot, x_f, x_f_dot]
-
-        Control at node k:
-            u_k (scalar force)
-
-        Dynamics constraint (for each interval k):
-            x_{k+1} - x_k
-            - dt/2 * ( f(x_k,u_k) + f(x_{k+1},u_{k+1}) ) = 0
-
-        Cost:
-            J = sum_k dt/2 * ( g(x_k,u_k) + g(x_{k+1},u_{k+1}) ),
-            with g(x,u) = Q_l (l - l_ref)^2 + R_u u^2, l = x_b - x_f.
-        """
-
         def __init__(
             self,
-            hopper,            # instance of simplified_GRP_hopper
-            H,                 # number of intervals
-            dt,                # time step (assume constant here)
-            x0,                # initial state (4,)
-            mode_seq,          # list of length H, each 'flight' or 'stance'
-            u_min, u_max,      # scalar bounds on u
-            l_ref,             # desired leg length
+            hopper,
+            H,
+            dt,
+            x0,
+            mode_seq,
+            u_min, u_max,
+            l_ref,
             Q_l=1.0,
             R_u=1e-3,
+            Q_bh=0.0,
+            Q_fh=0.0,
+            Q_bd=0.0,
+            body_ref=0.3,
+            foot_ref=0.0,
         ):
+
+            # -----------------------------
+            # store parameters
+            # -----------------------------
             self.hopper = hopper
             self.H = H
             self.dt = dt
             self.nx = 4
             self.nu = 1
+
+            # mode sequence (must be length H)
             self.mode_seq = list(mode_seq)
-            assert len(self.mode_seq) == H, "mode_seq length must equal H"
-            self.u_min = u_min
-            self.u_max = u_max
+            assert len(self.mode_seq) == H
+
+            # cost parameters
             self.l_ref = l_ref
             self.Q_l = Q_l
             self.R_u = R_u
+            self.Q_bh = Q_bh
+            self.Q_fh = Q_fh
+            self.Q_bd = Q_bd
+            self.body_ref = body_ref
+            self.foot_ref = foot_ref
 
-            # Number of decision variables:
-            #   states x_0...x_H (H+1 nodes)
-            #   controls u_0...u_H (H+1 nodes)
+            # -----------------------------
+            # Decision variables = X + U
+            # X: (H+1)*4
+            # U: (H+1)*1
+            # -----------------------------
             self.Nx_total = (H + 1) * self.nx
             self.Nu_total = (H + 1) * self.nu
             n_var = self.Nx_total + self.Nu_total
 
-            # Number of equality constraints (4 per interval)
+            # constraints = defects for each interval (H * 4)
             m_constr = H * self.nx
 
-            # ----- variable bounds -----
+            # -----------------------------
+            # Variable bounds
+            # -----------------------------
             w_L = -1e6 * np.ones(n_var)
             w_U =  1e6 * np.ones(n_var)
 
-            # Fix initial state: x_0 = x0
-            w_L[0:self.nx] = x0
-            w_U[0:self.nx] = x0
+            # Initial state fixed
+            w_L[:self.nx] = x0
+            w_U[:self.nx] = x0
 
-            # Control bounds for all u_k
+            # Control bounds
             u_start = self.Nx_total
             w_L[u_start:] = u_min
             w_U[u_start:] = u_max
 
-            # ----- constraint bounds: all dynamics defects = 0 -----
+            # constraint bounds = 0
             c_L = np.zeros(m_constr)
             c_U = np.zeros(m_constr)
 
@@ -169,130 +169,148 @@ class simplified_GRP_hopper:
 
             super().__init__(n=n_var, m=m_constr, lb=w_L, ub=w_U, cl=c_L, cu=c_U)
 
-        # ---- helpers ----
 
+        # -----------------------------------------------------
+        # Helper: unpack X and U
+        # -----------------------------------------------------
         def _unpack(self, w):
-            """
-            Split big vector w into:
-                X: (H+1, 4) states
-                U: (H+1, 1) controls
-            """
-            x_flat = w[:self.Nx_total]
-            u_flat = w[self.Nx_total:]
-            X = x_flat.reshape((self.H + 1, self.nx))
-            U = u_flat.reshape((self.H + 1, self.nu))
+            X = w[:self.Nx_total].reshape((self.H + 1, self.nx))
+            U = w[self.Nx_total:].reshape((self.H + 1, self.nu))
             return X, U
 
-        def _running_cost(self, x, u):
-            """Return scalar cost for state/control pair."""
-            x_b, _, x_f, _ = map(float, x)
-            l = x_b - x_f
-            # ensure scalar u
-            u_val = float(np.asarray(u).ravel()[0])
-            cost = self.Q_l * (l - self.l_ref) ** 2 + self.R_u * (u_val ** 2)
-            return float(cost)
 
+        # -----------------------------------------------------
+        # Running cost
+        # -----------------------------------------------------
+        def _running_cost(self, x, u):
+
+            x_b, x_b_dot, x_f, x_f_dot = x
+            u = float(u)
+
+            l = x_b - x_f
+
+            return (
+                self.Q_l  * (l - self.l_ref)**2 +
+                self.R_u  * (u**2) +
+                self.Q_bh * (x_b - self.body_ref)**2 +
+                self.Q_fh * (x_f - self.foot_ref)**2 +
+                self.Q_bd * (x_b_dot**2)
+            )
+
+
+        # -----------------------------------------------------
+        # Objective (trapezoidal integration)
+        # -----------------------------------------------------
         def objective(self, w):
-            """Trapezoidal integration of running cost; always returns float."""
             X, U = self._unpack(w)
             J = 0.0
             for k in range(self.H):
-                gk   = float(self._running_cost(X[k],   U[k]))
-                gkp1 = float(self._running_cost(X[k+1], U[k+1]))
-                # print(type(gk), type(gkp1), gk, gkp1)
-                J += float(0.5 * self.dt * (gk + gkp1))
+                J += 0.5 * self.dt * (
+                    self._running_cost(X[k],   U[k]) +
+                    self._running_cost(X[k+1], U[k+1])
+                )
             return float(J)
 
+
+        # -----------------------------------------------------
+        # Gradient (finite diff)
+        # -----------------------------------------------------
         def gradient(self, w):
-            """
-            Finite-difference gradient of objective.
-            (Simple but OK for small problems; can be replaced by analytic later.)
-            """
             eps = 1e-8
             f0 = self.objective(w)
             grad = np.zeros_like(w)
             for i in range(len(w)):
-                wp = w.copy()
-                wp[i] += eps
-                grad[i] = (self.objective(wp) - f0) / eps
+                w2 = w.copy()
+                w2[i] += eps
+                grad[i] = (self.objective(w2) - f0) / eps
             return grad
 
+
+        # -----------------------------------------------------
+        # Dynamics constraints
+        # -----------------------------------------------------
         def constraints(self, w):
-            """
-            Dynamics constraints for each interval k:
-
-                x_{k+1} - x_k
-                - dt/2 * ( f(x_k, u_k) + f(x_{k+1}, u_{k+1}) ) = 0
-
-            stacked for k = 0,...,H-1 into a vector of length H*nx.
-            """
             X, U = self._unpack(w)
             c = np.zeros(self.H * self.nx)
 
             for k in range(self.H):
-                xk   = X[k]
+
+                xk = X[k]
                 xkp1 = X[k+1]
-                uk   = U[k, 0]
-                ukp1 = U[k+1, 0]
+                uk = float(U[k])
+                ukp1 = float(U[k+1])
 
                 mode = self.mode_seq[k]
-                if mode == 'flight':
-                    fk,   _ = self.hopper.flight_state(xk,   uk)
+
+                if mode == "flight":
+                    fk, _   = self.hopper.flight_state(xk,   uk)     # take only x_dot
                     fkp1, _ = self.hopper.flight_state(xkp1, ukp1)
-                elif mode == 'stance':
-                    fk,   _ = self.hopper.stance_state(xk,   uk)
+                else:  # stance
+                    fk, _   = self.hopper.stance_state(xk,   uk)
                     fkp1, _ = self.hopper.stance_state(xkp1, ukp1)
-                else:
-                    raise ValueError(f"Unknown mode '{mode}' at step {k}")
+
+                fk   = np.asarray(fk)
+                fkp1 = np.asarray(fkp1)
 
                 defect = xkp1 - xk - 0.5 * self.dt * (fk + fkp1)
                 c[k*self.nx:(k+1)*self.nx] = defect
 
             return c
 
+
+
+        # -----------------------------------------------------
+        # Jacobian (finite diff)
+        # -----------------------------------------------------
         def jacobian(self, w):
-            """
-            Finite-difference Jacobian of constraints:
-
-                J_ij = d c_i / d w_j
-
-            returned as a flattened (row-major) array, as required by cyipopt.
-            """
             eps = 1e-8
             c0 = self.constraints(w)
             m = len(c0)
             n = len(w)
+
             J = np.zeros((m, n))
             for j in range(n):
-                wp = w.copy()
-                wp[j] += eps
-                cj = self.constraints(wp)
-                J[:, j] = (cj - c0) / eps
+                w2 = w.copy()
+                w2[j] += eps
+                c2 = self.constraints(w2)
+                J[:, j] = (c2 - c0) / eps
+
             return J.ravel()
 
-            # ---- Solve one-step MPC problem ----
-        def compute(self, x_current, l_ref=None, warm_start=None):
-            """
-            Solve the NLP given the current state, return first control action u0.
-            Optionally override l_ref for dynamic leg-length tracking.
-            """
+
+        # -----------------------------------------------------
+        # Solve MPC and return u0
+        # -----------------------------------------------------
+        def compute(self, x_current, l_ref=None, body_ref=None, warm_start=None):
+
+            # -------------------------------------------------
+            # Update references (body height / leg length)
+            # -------------------------------------------------
             if l_ref is not None:
                 self.l_ref = l_ref
+            if body_ref is not None:
+                self.body_ref = body_ref
 
-            # Update initial state bounds
+            # -------------------------------------------------
+            # Enforce initial state constraint x_0 = x_current
+            # -------------------------------------------------
             self.lb[:self.nx] = x_current
             self.ub[:self.nx] = x_current
 
-            # Initial guess for IPOPT
+            # -------------------------------------------------
+            # Warm-start strategy
+            # -------------------------------------------------
             if warm_start is None:
-                w0 = np.zeros(self.n + self.m)
-                # simple initialization
+                # naive warm start
                 X0 = np.tile(x_current, self.H + 1)
                 U0 = np.zeros((self.H + 1, self.nu))
                 w0 = np.concatenate([X0, U0.ravel()])
             else:
                 w0 = warm_start
 
+            # -------------------------------------------------
+            # Build NLP instance
+            # -------------------------------------------------
             nlp = cyipopt.Problem(
                 n=self.n,
                 m=self.m,
@@ -303,14 +321,35 @@ class simplified_GRP_hopper:
                 cu=self.cu,
             )
 
-            nlp.add_option('max_iter', 200)
-            nlp.add_option('print_level', 0)
-            nlp.add_option('tol', 1e-3)
+            # -------------------------------------------------
+            # FAST IPOPT SETTINGS (correct for cyipopt)
+            # -------------------------------------------------
+            # L-BFGS Hessian (no exact Hessian needed)
+            nlp.add_option("hessian_approximation", "limited-memory")
+            nlp.add_option("limited_memory_max_history", 20)
+            nlp.add_option("limited_memory_initialization", "scalar2")
 
+            # Linear solver
+            nlp.add_option("linear_solver", "mumps")
+
+            # Convergence tolerances
+            nlp.add_option("tol", 1e-3)
+            nlp.add_option("acceptable_tol", 5e-3)
+
+            # Max iterations
+            nlp.add_option("max_iter", 150)
+
+            # Quiet solver
+            nlp.add_option("print_level", 0)
+
+            # -------------------------------------------------
+            # Solve NLP
+            # -------------------------------------------------
             w_opt, info = nlp.solve(w0)
 
             X_opt, U_opt = self._unpack(w_opt)
-            u0 = U_opt[0, 0]
-            return u0
 
+            # Return u_0 only
+            return float(U_opt[0, 0])
 
+      

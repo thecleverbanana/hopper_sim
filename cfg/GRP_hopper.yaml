@@ -19,12 +19,31 @@ simplified_GRP_hopper:
       kd: 12.0          # derivative gain
 
     NLP:
-      H: 25             # number of discretization intervals
-      u_min: -200.0     # [N] minimum control input
-      u_max: 200.0      # [N] maximum control input
-      Q_l: 1.0          # cost weight for leg length tracking
-      R_u: 0.001        # cost weight for control effort
-      l_ref: 0.3        # [m] desired leg length
+      # MPC Planning Horizon
+      H: 25             # number of steps in prediction horizon
+      dt_control: 0.005  # [s] timestep for MPC planning (can be coarser than simulation)
+      
+      # Control Input Constraints
+      u_min: -200.0      # [N] minimum control force
+      u_max: 200.0       # [N] maximum control force
 
-  # --- Simulation defaults ---
+      # Cost Function Weights
+      Q_l: 0.0           # leg length tracking weight (0 = disabled)
+      Q_bh: 10.0       # body height tracking weight
+      Q_fh: 0.0          # foot height tracking weight (0 = disabled)
+      Q_bd: 0.0          # body velocity damping weight
+      R_u: 0.0        # control effort penalty
+      
+      # Reference Targets
+      l_ref: 0.3         # [m] reference leg length
+      body_ref: 0.5      # [m] reference body height
+      foot_ref: 0.0      # [m] reference foot height
+
+  # --- Simulation settings ---
+  simulation:
+    dt: 0.001                   # [s] simulation timestep
+    t_max: 2.0                  # [s] total simulation time
+    control_update_freq: 10     # update MPC every N simulation steps (every dt*N seconds)
+
+  # --- Initial conditions ---
   x0: [[0.5, -0.1, 0.4, 0.0]]  # initial state [x_b, x_b_dot, x_f, x_f_dot]
