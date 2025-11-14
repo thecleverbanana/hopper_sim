@@ -30,6 +30,61 @@ class simplified_GRP_hopper:
 
         return np.array([x_b_dot, x_b_ddot, x_f_dot, x_f_ddot]), F_sub
 
+    def jacobian_dynamics(self, X, u, mode):
+        # X = [x_b, x_b_dot, x_f, x_f_dot]
+        x_b, x_b_dot, x_f, x_f_dot = X
+
+        k = self.k
+        c = self.c
+        mb = self.mb
+        mf = self.mf
+        l0 = self.l0
+        g  = self.g
+
+        # leg terms (not actually needed for df, but harmless)
+        delta_l    = l0 - (x_b - x_f)
+        delta_ldot = x_f_dot - x_b_dot
+
+        # ∂F_leg/∂state (F = k*delta_l + c*delta_ldot)
+        dF_dx_b     = -k
+        dF_dx_bdot  = -c
+        dF_dx_f     =  k
+        dF_dx_fdot  =  c
+
+        # f = [ x_b_dot,
+        #       x_b_ddot,
+        #       x_f_dot,
+        #       x_f_ddot ]
+        f_x = np.zeros((4,4))
+        f_u = np.zeros((4,))
+
+        # common entries
+        # row 0: dx_b/dt = x_b_dot
+        f_x[0,1] = 1.0
+
+        # row 1: dx_b_dot/dt = -g + (F + u)/mb
+        f_x[1,0] = dF_dx_b     / mb
+        f_x[1,1] = dF_dx_bdot  / mb
+        f_x[1,2] = dF_dx_f     / mb
+        f_x[1,3] = dF_dx_fdot  / mb
+        f_u[1]   = 1.0 / mb
+
+        if mode == "flight":
+            # row 2: dx_f/dt = x_f_dot
+            f_x[2,3] = 1.0
+
+            # row 3: dx_f_dot/dt = -g - F/mf
+            f_x[3,0] = -dF_dx_b    / mf
+            f_x[3,1] = -dF_dx_bdot / mf
+            f_x[3,2] = -dF_dx_f    / mf
+            f_x[3,3] = -dF_dx_fdot / mf
+
+        else:  # stance: foot fixed (x_f = 0, x_f_dot = 0)
+            # row 2,3 = 0 already
+            pass
+
+        return f_x, f_u
+    
     def stance_state(self, X, u, substrate='rigid'):
         x_b, x_b_dot, x_f, x_f_dot = X
         g = self.g
@@ -231,11 +286,11 @@ class simplified_GRP_hopper:
         # -----------------------------------------------------
         def constraints(self, w):
             X, U = self._unpack(w)
-            c = np.zeros(self.H * self.nx)
+            c = np.zeros(self.H * self.nx) # [H*4] 1-d tensor
 
             for k in range(self.H):
 
-                xk = X[k]
+                xk = X[k] #[4]
                 xkp1 = X[k+1]
                 uk = float(U[k])
                 ukp1 = float(U[k+1])
@@ -249,31 +304,83 @@ class simplified_GRP_hopper:
                     fk, _   = self.hopper.stance_state(xk,   uk)
                     fkp1, _ = self.hopper.stance_state(xkp1, ukp1)
 
-                fk   = np.asarray(fk)
+                fk   = np.asarray(fk) #[4]
                 fkp1 = np.asarray(fkp1)
 
-                defect = xkp1 - xk - 0.5 * self.dt * (fk + fkp1)
-                c[k*self.nx:(k+1)*self.nx] = defect
+                defect = xkp1 - xk - 0.5 * self.dt * (fk + fkp1) #[4]
+                c[k*self.nx:(k+1)*self.nx] = defect 
 
             return c
 
-
-
         # -----------------------------------------------------
-        # Jacobian (finite diff)
+        # Analytic Jacobian of constraints
         # -----------------------------------------------------
+
         def jacobian(self, w):
-            eps = 1e-8
-            c0 = self.constraints(w)
-            m = len(c0)
-            n = len(w)
+            X, U = self._unpack(w)
+            H = self.H
+            dt = self.dt
 
-            J = np.zeros((m, n))
-            for j in range(n):
-                w2 = w.copy()
-                w2[j] += eps
-                c2 = self.constraints(w2)
-                J[:, j] = (c2 - c0) / eps
+            # Jacobian is m × n flattened
+            J = np.zeros((self.m, self.n))
+
+            # convenience
+            nx = self.nx
+            nu = self.nu
+            Nx_total = self.Nx_total
+
+            # loop over each interval
+            for k in range(H):
+                row0 = k * nx
+
+                # extract variables
+                xk     = X[k]
+                xkp1   = X[k+1]
+                uk     = float(U[k])
+                ukp1   = float(U[k+1])
+
+                mode = self.mode_seq[k]
+
+                # ------------------------------------------------------------------
+                # 1. compute f(x_k, u_k) and f(x_{k+1}, u_{k+1})
+                # ------------------------------------------------------------------
+                if mode == "flight":
+                    fk, _ = self.hopper.flight_state(xk, uk)
+                    fkp1, _ = self.hopper.flight_state(xkp1, ukp1)
+                else:
+                    fk, _ = self.hopper.stance_state(xk, uk)
+                    fkp1, _ = self.hopper.stance_state(xkp1, ukp1)
+
+                fk   = np.asarray(fk)
+                fkp1 = np.asarray(fkp1)
+
+                # ------------------------------------------------------------------
+                # 2. analytic Jacobian of dynamics f_x and f_u
+                # flight_state and stance_state must return analytic derivatives
+                # ------------------------------------------------------------------
+                fk_x, fk_u = self.hopper.jacobian_dynamics(xk, uk, mode)
+                fkp1_x, fkp1_u = self.hopper.jacobian_dynamics(xkp1, ukp1, mode)
+
+                # trapezoidal coefficients
+                A_k   = -np.eye(nx) - 0.5 * dt * fk_x
+                B_k   = -0.5 * dt * fk_u.reshape(nx, 1)
+                A_kp1 =  np.eye(nx) - 0.5 * dt * fkp1_x
+                B_kp1 = -0.5 * dt * fkp1_u.reshape(nx, 1)
+
+                # ------------------------------------------------------------------
+                # 3. scatter these into Jacobian matrix
+                # ------------------------------------------------------------------
+                # column indices
+                xk_col     = k * nx
+                xkp1_col   = (k+1) * nx
+                uk_col     = Nx_total + k * nu
+                ukp1_col   = Nx_total + (k+1) * nu
+
+                # fill blocks
+                J[row0:row0+nx, xk_col:xk_col+nx]       = A_k
+                J[row0:row0+nx, xkp1_col:xkp1_col+nx]   = A_kp1
+                J[row0:row0+nx, uk_col:uk_col+nu]       = B_k
+                J[row0:row0+nx, ukp1_col:ukp1_col+nu]   = B_kp1
 
             return J.ravel()
 

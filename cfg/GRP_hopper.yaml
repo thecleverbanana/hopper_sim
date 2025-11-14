@@ -24,15 +24,15 @@ simplified_GRP_hopper:
       dt_control: 0.005  # [s] timestep for MPC planning (can be coarser than simulation)
       
       # Control Input Constraints
-      u_min: -200.0      # [N] minimum control force
-      u_max: 200.0       # [N] maximum control force
+      u_min: -50.0      # [N] minimum control force
+      u_max: 50.0       # [N] maximum control force
 
       # Cost Function Weights
-      Q_l: 0.1           # leg length tracking weight (0 = disabled)
+      Q_l: 1           # leg length tracking weight (0 = disabled)
       Q_bh: 10.0       # body height tracking weight
       Q_fh: 0.0          # foot height tracking weight (0 = disabled)
       Q_bd: 0.0          # body velocity damping weight
-      R_u: 0.0        # control effort penalty
+      R_u: 1.0        # control effort penalty
       
       # Reference Targets
       l_ref: 0.3         # [m] reference leg length
@@ -42,7 +42,7 @@ simplified_GRP_hopper:
   # --- Simulation settings ---
   simulation:
     dt: 0.001                   # [s] simulation timestep
-    t_max: 2.0                  # [s] total simulation time
+    t_max: 10.0                  # [s] total simulation time
     control_update_freq: 50     # update MPC every N simulation steps (every dt*N seconds = 0.05s = 20Hz)
 
   # --- Initial conditions ---
