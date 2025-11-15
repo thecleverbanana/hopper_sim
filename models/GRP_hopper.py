@@ -224,7 +224,6 @@ class simplified_GRP_hopper:
 
             super().__init__(n=n_var, m=m_constr, lb=w_L, ub=w_U, cl=c_L, cu=c_U)
 
-
         # -----------------------------------------------------
         # Helper: unpack X and U
         # -----------------------------------------------------
