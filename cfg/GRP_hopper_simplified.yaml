@@ -1,0 +1,49 @@
+simplified_GRP_hopper:
+  # --- Physical parameters ---
+  mb: 2.0            # [kg] body mass
+  mf: 0.2            # [kg] foot/leg mass
+  l0: 0.3            # [m] rest leg length
+  g: 9.81            # [m/s²] gravity
+
+  substrate: "rigid"   # options: "rigid" or "granular"
+
+  # --- Control settings ---
+  controller:
+    # Choose between: "PD" or "NLP"
+    # type: "NLP"
+
+    PD:
+      kp: 5000.0        # proportional gain
+      kd: 12.0          # derivative gain
+
+    NLP:
+      # MPC Planning Horizon
+      H: 25             # number of steps in prediction horizon
+      dt_control: 0.005  # [s] timestep for MPC planning (can be coarser than simulation)
+      
+      # Control Input Constraints
+      u_min: -100.0      # [N] minimum control force (increased for hopping)
+      u_max: 100.0       # [N] maximum control force (increased for hopping)
+
+      # Cost Function Weights
+      Q_bh: 1000.0       # body height tracking weight
+      Q_bv: 10.0          # body velocity damping weight (reduced for more dynamic motion)
+      Q_fh: 500.0          # foot height tracking weight (for liftoff!)
+      Q_fv: 10.0          # foot velocity tracking weight (reduced)
+      Q_l: 100.0         # leg length tracking weight (reduced to allow more flexibility)
+      R_u: 0.01        # control effort penalty (very low to allow aggressive control)
+      
+      # Reference Targets
+      l_ref: 0.3         # [m] reference leg length
+      body_ref: 0.5      # [m] terminal reference body height at apex
+      foot_ref: 0.2      # [m] terminal reference foot height at apex (lifted off ground!)
+      body_vref: 0.0     # [m/s] terminal reference body velocity (apex condition)
+      foot_vref: 0.0     # [m/s] terminal reference foot velocity
+
+  # --- Simulation settings ---
+  simulation:
+    dt: 0.001                   # [s] simulation timestep
+    t_max: 2.0                  # [s] total simulation time (longer to see multiple hops)
+
+  # --- Initial conditions ---
+  x0: [[0.25, 0.0, 0.0, 0.0]]  # initial state [x_b, x_b_dot, x_f, x_f_dot] - leg compressed (0.25m < rest 0.3m), ready to jump

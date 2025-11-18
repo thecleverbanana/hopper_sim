@@ -28,15 +28,15 @@ simplified_GRP_hopper:
       u_max: 50.0       # [N] maximum control force
 
       # Cost Function Weights
-      Q_l: 1           # leg length tracking weight (0 = disabled)
-      Q_bh: 10.0       # body height tracking weight
+      Q_l: 0           # leg length tracking weight (0 = disabled)
+      Q_bh: 100.0       # body height tracking weight
       Q_fh: 0.0          # foot height tracking weight (0 = disabled)
       Q_bd: 0.0          # body velocity damping weight
-      R_u: 1.0        # control effort penalty
+      R_u: 0.001      # control effort penalty
       
       # Reference Targets
       l_ref: 0.3         # [m] reference leg length
-      body_ref: 0.2      # [m] reference body height
+      body_ref: 0.5      # [m] reference body height
       foot_ref: 0.0      # [m] reference foot height
 
   # --- Simulation settings ---
