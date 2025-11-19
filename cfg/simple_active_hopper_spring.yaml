@@ -17,14 +17,14 @@ nlp:
   u_min: -500.0            # Control lower bound (increased for more authority)
   u_max: 500.0             # Control upper bound (increased for more authority)
   R_u: 5e-6                # Control effort weight (very small to allow aggressive control)
-  R_du: 1e-3               # Control rate penalty (for smoothness) - penalizes rapid control changes
-  Q_x: 800.0               # Height tracking weight (running) - increased for better height tracking throughout
-  Q_v: 15.0                # Velocity weight (running) - increased for smoother trajectories
-  Q_xT: 500.0              # Height tracking weight (terminal) - reduced to focus on running cost
+  R_du: 3.0                # Control rate penalty (reduced slightly for better responsiveness)
+  Q_x: 50.0               # Height tracking weight (INCREASED for better tracking)
+  Q_v: 20.0                # Velocity weight (INCREASED for smoother velocity tracking)
+  Q_xT: 10000.0             # Height tracking weight (INCREASED for accurate terminal tracking)
   Q_vT: 15.0               # Velocity weight (terminal) - balanced
-  Q_lc: 50.0               # Limit cycle stabilization weight (penalizes deviation from periodic orbit)
+  Q_lc: 10.0               # Limit cycle stabilization weight (penalizes deviation from periodic orbit)
   enable_limit_cycle: true # Enable limit cycle stabilization
-  x_target: 0.6            # Target body height
+  x_target: 0.8            # Target body height (higher challenge - test NLP capability)
 
 # Simulation parameters
 simulation:

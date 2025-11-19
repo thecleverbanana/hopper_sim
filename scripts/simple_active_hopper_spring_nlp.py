@@ -124,14 +124,14 @@ state_current = "stance" if x0[2] <= 0 else "flight"
 #                    Trajectory Configuration
 # ============================================================
 # Choose trajectory type: "constant", "periodic", "step", or "ramp"
-TRAJECTORY_TYPE = "constant"  # Change this to switch trajectory types: "constant", "periodic", "step", or "ramp"
+TRAJECTORY_TYPE = "periodic"  # Change this to switch trajectory types: "constant", "periodic", "step", or "ramp"
 
 # Define trajectory function (None for constant target)
 x_ref_func = None
 
 if TRAJECTORY_TYPE == "periodic":
-    # Periodic hopping: sinusoidal height variation
-    x_ref_func = lambda t: periodic_hopping_trajectory(t, amplitude=0.25, base_height=0.35, period=0.6)
+    # Periodic hopping: sinusoidal height variation (reduced amplitude for smoother tracking)
+    x_ref_func = lambda t: periodic_hopping_trajectory(t, amplitude=0.15, base_height=0.4, period=0.8)
 elif TRAJECTORY_TYPE == "step":
     # Step trajectory: piecewise constant heights
     x_ref_func = lambda t: step_trajectory(t, heights=[0.3, 0.6, 0.4, 0.7], times=[0.0, 1.0, 2.0, 3.0])
@@ -516,6 +516,20 @@ if enable_limit_cycle and len(poincare_states) > 1:
         print(f"  Velocity std at Poincaré: {poincare_std[1]:.6f} m/s")
         print(f"  → Lower std = more stable limit cycle")
 print("="*60 + "\n")
+
+# ============================================================
+#                    Save Simulation Data
+# ============================================================
+# Save data to npz file
+np.savez("hopper_simulation_data.npz", 
+         x=x, 
+         state_arr=mode_hist, 
+         t=t, 
+         dt_sim=dt_sim)
+print(f"✅ Simulation data saved to: hopper_simulation_data.npz")
+print(f"   To load: data = np.load('hopper_simulation_data.npz')")
+print(f"   Access: x = data['x'], state_arr = data['state_arr'], t = data['t'], dt_sim = data['dt_sim']")
+print()
 
 # Plotting
 fig, axs = plt.subplots(7, 1, figsize=(12, 14), sharex=True)
