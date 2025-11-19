@@ -3,7 +3,7 @@ simplified_GRP_hopper:
   mb: 0.3            # [kg] body mass
   mf: 0.1            # [kg] foot/leg mass
   k: 1000.0           # [N/m] spring stiffness
-  c: 1.5             # [N·s/m] damping coefficient
+  c: 1.0             # [N·s/m] damping coefficient
   l0: 0.3            # [m] rest leg length
   g: 9.81            # [m/s²] gravity
 
@@ -29,14 +29,10 @@ simplified_GRP_hopper:
 
       # Cost Function Weights
       Q_l: 0           # leg length tracking weight (0 = disabled)
-      Q_bh: 10000.0       # body height tracking weight
-      Q_fh: 10000.0          # foot height tracking weight (0 = disabled)
-      Q_bd: 0.0          # body velocity damping weight
-      R_u: 0.001      # control effort penalty
-      Ql_T: 0.0        # leg length tracking terminal cost (0 = disabled)
-      Qbh_T: 0       # body height tracking terminal cost (0 = disabled)
-      Qfh_T: 0.0       # foot height tracking terminal cost (0 = disabled)
-      Qbd_T: 0.0       # body velocity damping terminal cost (0 = disabled)
+      Q_bh: 1000.0       # body height tracking weight
+      Q_fh: 1000.0          # foot height tracking weight (0 = disabled)
+      Q_bd: 1.0          # body velocity damping weight
+      R_u: 0.00      # control effort penalty
       
       # Reference Targets
       l_ref: 0.3         # [m] reference leg length

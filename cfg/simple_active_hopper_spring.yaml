@@ -10,21 +10,19 @@ pd:
   kp: 800
   kd: 100
 
-# NLP/MPC Controller parameters (tuned to outperform PD)
+# NLP/MPC Controller parameters (tuned for smooth trajectories)
 nlp:
-  H: 25                    # Prediction horizon (balanced for accuracy and speed)
-  dt_control: 0.025        # MPC time step (balanced)
+  H: 30                    # Prediction horizon (increased for smoother look-ahead)
+  dt_control: 0.02         # MPC time step (more frequent updates for smoothness)
   u_min: -500.0            # Control lower bound (increased for more authority)
   u_max: 500.0             # Control upper bound (increased for more authority)
   R_u: 5e-6                # Control effort weight (very small to allow aggressive control)
-  R_du: 3.0                # Control rate penalty (reduced slightly for better responsiveness)
-  Q_x: 50.0               # Height tracking weight (INCREASED for better tracking)
-  Q_v: 20.0                # Velocity weight (INCREASED for smoother velocity tracking)
-  Q_xT: 10000.0             # Height tracking weight (INCREASED for accurate terminal tracking)
-  Q_vT: 15.0               # Velocity weight (terminal) - balanced
-  Q_lc: 10.0               # Limit cycle stabilization weight (penalizes deviation from periodic orbit)
-  enable_limit_cycle: true # Enable limit cycle stabilization
-  x_target: 0.8            # Target body height (higher challenge - test NLP capability)
+  R_du: 5e-4               # Control rate penalty (penalizes control changes for smoothness - balanced)
+  Q_x: 400.0               # Height tracking weight (running) - increased for better tracking
+  Q_v: 20.0                # Velocity weight (running) - INCREASED for smoother motion
+  Q_xT: 2000.0             # Height tracking weight (terminal) - very high for accuracy
+  Q_vT: 40.0               # Velocity weight (terminal) - INCREASED for smoother motion
+  x_target: 0.6            # Target body height
 
 # Simulation parameters
 simulation:

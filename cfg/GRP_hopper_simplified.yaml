@@ -1,0 +1,49 @@
+simplified_GRP_hopper:
+  # --- Physical parameters ---
+  mb: 2.0             # [kg] body mass
+  mf: 0.2             # [kg] foot/leg mass
+  l0: 0.3             # [m] rest leg length
+  g: 9.81             # [m/s²] gravity
+
+  substrate: "rigid"
+
+  # --- Control settings ---
+  controller:
+    NLP:
+      # ------------- Horizon -------------
+      H: 25
+      dt_control: 0.01
+
+      # ------------- Input bounds -------------
+      u_min: -200.0
+      u_max: 200.0
+
+      # ============================================
+      # NEW cost-design structure (aligned with code)
+      # ============================================
+
+      # -------- Running cost --------
+      R_u: 0.005           # control effort
+      Q_l: 500.0           # leg-length consistency
+      Q_b_mid: 50.0        # keep body from collapsing mid-trajectory
+      min_body_height: 0.05
+
+      # -------- Terminal cost --------
+      Q_bh: 2000.0         # body height at apex
+      Q_bv: 5.0            # body velocity at apex
+      Q_fh: 200.0          # foot height at apex
+      Q_fv: 5.0            # foot velocity at apex
+
+      # -------- Terminal references --------
+      body_ref: 2.0        # desired body apex height
+      body_vref: 0.0
+      foot_ref: 1.7        # foot should be near leg length l0 at apex
+      foot_vref: 0.0
+
+  # --- Simulation settings ---
+  simulation:
+    dt: 0.001
+    t_max: 2.0
+
+  # --- Initial conditions ---
+  x0: [[1.0, 0.0, 0.85, 0.0]]
