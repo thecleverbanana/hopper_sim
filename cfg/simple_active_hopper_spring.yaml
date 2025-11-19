@@ -1,0 +1,31 @@
+body_mass: 1
+leg_mass: 0.2
+spring_length: 0.3
+spring_constant: 200
+gravity: 9.81
+x0: [0.25, 0.0, 0.0, 0.0] # yb, yb_dot, yl, yl_dot (start compressed on ground)
+
+# PD Controller parameters
+pd:
+  kp: 800
+  kd: 100
+
+# NLP/MPC Controller parameters (tuned for smooth trajectories)
+nlp:
+  H: 30                    # Prediction horizon (increased for smoother look-ahead)
+  dt_control: 0.02         # MPC time step (more frequent updates for smoothness)
+  u_min: -500.0            # Control lower bound (increased for more authority)
+  u_max: 500.0             # Control upper bound (increased for more authority)
+  R_u: 5e-6                # Control effort weight (very small to allow aggressive control)
+  R_du: 5e-4               # Control rate penalty (penalizes control changes for smoothness - balanced)
+  Q_x: 400.0               # Height tracking weight (running) - increased for better tracking
+  Q_v: 20.0                # Velocity weight (running) - INCREASED for smoother motion
+  Q_xT: 2000.0             # Height tracking weight (terminal) - very high for accuracy
+  Q_vT: 40.0               # Velocity weight (terminal) - INCREASED for smoother motion
+  x_target: 0.6            # Target body height
+
+# Simulation parameters
+simulation:
+  dt: 0.002                # Simulation time step (increased for speed, still accurate)
+  t_max: 3.0               # Simulation duration (reduced for faster demo)
+  

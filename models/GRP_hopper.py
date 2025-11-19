@@ -151,12 +151,16 @@ class simplified_GRP_hopper:
             x0,
             mode_seq,
             u_min, u_max,
+            R_u,
             l_ref,
             Q_l=1.0,
-            R_u=1e-3,
             Q_bh=0.0,
             Q_fh=0.0,
             Q_bd=0.0,
+            Ql_T=0.0,
+            Qbh_T=0.0,
+            Qfh_T=0.0,
+            Qbd_T=0.0,
             body_ref=0.3,
             foot_ref=0.0,
         ):
@@ -181,6 +185,10 @@ class simplified_GRP_hopper:
             self.Q_bh = Q_bh
             self.Q_fh = Q_fh
             self.Q_bd = Q_bd
+            self.Ql_T = Ql_T
+            self.Qbh_T = Qbh_T
+            self.Qfh_T = Qfh_T
+            self.Qbd_T = Qbd_T
             self.body_ref = body_ref
             self.foot_ref = foot_ref
 
@@ -266,6 +274,31 @@ class simplified_GRP_hopper:
                 )
             return float(J)
 
+
+        # -----------------------------------------------------
+        # Objective (trapezoidal integration) with terminal cost
+        # -----------------------------------------------------
+        # def objective(self, w):
+        #     X, U = self._unpack(w)
+        #     J = 0.0
+
+        #     # running cost
+        #     for k in range(self.H):
+        #         J += self.dt * self._running_cost(X[k], U[k])
+
+        #     # terminal cost
+        #     x_T = X[self.H]
+        #     x_b, x_b_dot, x_f, x_f_dot = x_T
+        #     l = x_b - x_f
+
+        #     J += (
+        #         self.Ql_T  * (l - self.l_ref)**2 +
+        #         self.Qbh_T * (x_b - self.body_ref)**2 +
+        #         self.Qfh_T * (x_f - self.foot_ref)**2 +
+        #         self.Qbd_T * (x_b_dot**2)
+        #     )
+
+        #     return float(J)
 
         # -----------------------------------------------------
         # Gradient (finite diff)
