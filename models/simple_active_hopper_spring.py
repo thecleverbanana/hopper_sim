@@ -140,12 +140,14 @@ class NLPController(cyipopt.Problem):
         u_min=-200.0,
         u_max=200.0,
         R_u=1e-3,
-        R_du=0.0,  # Control rate penalty (for smoothness)
+        R_du=1e-4,  # Control rate penalty for smoothness
         Q_x=30.0,
         Q_v=5.0,
         Q_xT=80.0,
         Q_vT=10.0,
+        Q_lc=0.0,  # Limit cycle stabilization weight
         x_target=0.6,
+        enable_limit_cycle=False,  # Enable limit cycle stabilization
     ):
         """
         Initialize NLP controller.
@@ -177,17 +179,22 @@ class NLPController(cyipopt.Problem):
         
         # Cost parameters
         self.R_u = R_u
-        self.R_du = R_du  # Control rate penalty (smoothness)
+        self.R_du = R_du  # Control rate penalty for smoothness
         self.Q_x = Q_x
         self.Q_v = Q_v
         self.Q_xT = Q_xT
         self.Q_vT = Q_vT
+        self.Q_lc = Q_lc  # Limit cycle stabilization weight
         self.x_target = x_target  # Default constant target
         
         # Reference trajectory (can be function or array)
         self.x_ref_trajectory = None  # Will be set via update_reference()
         self.x_ref_function = None  # Callable function x_ref(t)
         self.t_current = 0.0  # Current simulation time (updated in compute())
+        
+        # Limit cycle stabilization
+        self.enable_limit_cycle = enable_limit_cycle
+        self.x_poincare_prev = None  # Previous Poincaré section state (for limit cycle)
         
         # -----------------------------
         # Decision variables: X + U
@@ -240,17 +247,21 @@ class NLPController(cyipopt.Problem):
     # -----------------------------------------------------
     # Cost Functions
     # -----------------------------------------------------
-    def _running_cost(self, x, v, u, x_ref=None, v_ref=None):
+    def _running_cost(self, x, v, u, u_prev=None, x_ref=None, v_ref=None):
         """Running cost at a single time step"""
         if x_ref is None:
             x_ref = self.x_target
         if v_ref is None:
             v_ref = 0.0  # Default: zero velocity reference
-        return (
+        cost = (
             self.R_u * u**2 +
             self.Q_x * (x - x_ref)**2 +
             self.Q_v * (v - v_ref)**2  # Track velocity reference for smoothness
         )
+        # Add control rate penalty for smoothness
+        if u_prev is not None:
+            cost += self.R_du * (u - u_prev)**2
+        return cost
     
     def _terminal_cost(self, xT, vT, x_ref=None):
         """Terminal cost"""
@@ -328,20 +339,26 @@ class NLPController(cyipopt.Problem):
         for k in range(H):
             x, v = X[k, 0], X[k, 1]
             u = U[k, 0]
+            u_prev = U[k-1, 0] if k > 0 else 0.0  # Previous control for rate penalty
             x_ref_k = self._get_reference(k, self.t_current)
             v_ref_k = self._get_reference_velocity(k, self.t_current)
-            J += dt * self._running_cost(x, v, u, x_ref_k, v_ref_k)
-            
-            # Control rate penalty for smoothness (if R_du > 0)
-            if k < H and self.R_du > 0:
-                u_next = U[k+1, 0]
-                du = u_next - u
-                J += dt * self.R_du * du**2
+            J += dt * self._running_cost(x, v, u, u_prev, x_ref_k, v_ref_k)
         
         # Terminal cost
         xT, vT = X[H, 0], X[H, 1]
         x_ref_T = self._get_reference(H, self.t_current)
         J += self._terminal_cost(xT, vT, x_ref_T)
+        
+        # Limit cycle stabilization: penalize deviation from previous Poincaré section
+        # This encourages convergence to a periodic orbit
+        if self.enable_limit_cycle and self.x_poincare_prev is not None:
+            # Use terminal state as current Poincaré section (assuming it's at touchdown)
+            xT_full = X[H]
+            # Only penalize height and velocity (not leg states which reset at touchdown)
+            J += self.Q_lc * (
+                (xT_full[0] - self.x_poincare_prev[0])**2 +
+                (xT_full[1] - self.x_poincare_prev[1])**2
+            )
         
         return float(J)
     
@@ -358,6 +375,7 @@ class NLPController(cyipopt.Problem):
         for k in range(H):
             x, v = X[k, 0], X[k, 1]  # Body height and velocity
             u = U[k, 0]
+            u_prev = U[k-1, 0] if k > 0 else 0.0
             x_ref_k = self._get_reference(k, self.t_current)
             v_ref_k = self._get_reference_velocity(k, self.t_current)
             
@@ -365,26 +383,24 @@ class NLPController(cyipopt.Problem):
             grad_X[k, 0] += dt * 2 * self.Q_x * (x - x_ref_k)
             # dJ/dv (velocity) - only affects body velocity (index 1)
             grad_X[k, 1] += dt * 2 * self.Q_v * (v - v_ref_k)
-            # dJ/du (control effort)
+            # dJ/du (control)
             grad_U[k, 0] += dt * 2 * self.R_u * u
-            
-            # Control rate penalty gradients (for smoothness)
-            if self.R_du > 0:
-                if k > 0:
-                    u_prev = U[k-1, 0]
-                    du_prev = u - u_prev
-                    grad_U[k, 0] += dt * 2 * self.R_du * du_prev
-                if k < H:
-                    u_next = U[k+1, 0]
-                    du_next = u_next - u
-                    grad_U[k, 0] += dt * 2 * self.R_du * (-du_next)
-                    grad_U[k+1, 0] += dt * 2 * self.R_du * du_next
+            # dJ/du (control rate penalty)
+            if k > 0:
+                grad_U[k, 0] += dt * 2 * self.R_du * (u - u_prev)
+                grad_U[k-1, 0] -= dt * 2 * self.R_du * (u - u_prev)
         
         # Terminal cost gradients
         xT, vT = X[H, 0], X[H, 1]
         x_ref_T = self._get_reference(H, self.t_current)
         grad_X[H, 0] += 2 * self.Q_xT * (xT - x_ref_T)
         grad_X[H, 1] += 2 * self.Q_vT * vT
+        
+        # Limit cycle stabilization gradients
+        if self.enable_limit_cycle and self.x_poincare_prev is not None:
+            xT_full = X[H]
+            grad_X[H, 0] += 2 * self.Q_lc * (xT_full[0] - self.x_poincare_prev[0])
+            grad_X[H, 1] += 2 * self.Q_lc * (xT_full[1] - self.x_poincare_prev[1])
         
         return np.concatenate([grad_X.reshape(-1), grad_U.reshape(-1)])
     
@@ -497,6 +513,30 @@ class NLPController(cyipopt.Problem):
         """Update mode sequence for MPC horizon"""
         assert len(mode_seq) == self.H, f"Mode sequence length {len(mode_seq)} != H {self.H}"
         self.mode_seq = list(mode_seq)
+    
+    # -----------------------------------------------------
+    # Limit Cycle Stabilization
+    # -----------------------------------------------------
+    def update_poincare_state(self, x_poincare):
+        """
+        Update Poincaré section state for limit cycle stabilization.
+        Call this when system crosses Poincaré section (e.g., at touchdown).
+        
+        Args:
+            x_poincare: State at Poincaré section [x_b, x_b_dot, x_l, x_l_dot]
+        """
+        self.x_poincare_prev = np.array(x_poincare)
+    
+    def enable_limit_cycle_stabilization(self, Q_lc, enable=True):
+        """
+        Enable/disable limit cycle stabilization.
+        
+        Args:
+            Q_lc: Weight for limit cycle cost
+            enable: Whether to enable limit cycle stabilization
+        """
+        self.enable_limit_cycle = enable
+        self.Q_lc = Q_lc
     
     # -----------------------------------------------------
     # Reference Trajectory Management
